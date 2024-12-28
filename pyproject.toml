@@ -7,14 +7,13 @@ name = "ramsey"
 description = "Probabilistic deep learning using JAX"
 authors = [{name = "Simon Dirmeier", email = "sfyrbnd@pm.me"}]
 readme = "README.md"
-license = "Apache-2.0"
-homepage = "https://github.com/ramsey-devs/ramsey"
+license = { file = "LICENSE"}
 keywords=[
   "Bayes",
   "jax",
   "probabilistic deep learning",
   "probabilistic models",
-  "neural process",
+  "neural processes",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -39,10 +38,6 @@ dependencies = [
 ]
 dynamic = ["version"]
 
-[project.optional-dependencies]
-dev = ["pre-commit", "tox", "ruff"]
-examples = ["matplotlib"]
-
 [project.urls]
 Documentation = "https://ramsey.rtfd.io"
 Homepage = "https://github.com/ramsey-devs/ramsey"
@@ -60,6 +55,7 @@ exclude = [
 
 [tool.hatch.envs.test]
 dependencies = [
+    "pre-commit",
     "ruff>=0.3.0",
     "pytest>=7.2.0",
     "pytest-cov>=4.0.0",

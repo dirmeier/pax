@@ -86,15 +86,6 @@ def train_neural_process(
         returns a tuple of trained parameters and training loss profile
     """
     train_state_rng, rng_key = jr.split(rng_key)
-    state = _create_train_state(
-        train_state_rng,
-        neural_process,
-        optimizer,
-        x_context=x,
-        y_context=y,
-        x_target=x,
-    )
-
     objectives = np.zeros(n_iter)
     for i in tqdm(range(n_iter)):
         split_rng_key, sample_rng_key, rng_key = jr.split(rng_key, 3)

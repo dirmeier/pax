@@ -2,7 +2,7 @@ import flax
 import jax
 import numpyro.distributions as dist
 from chex import assert_axis_dimension, assert_rank
-from flax import linen as nn
+from flax import nnx
 from jax import Array
 from jax import numpy as jnp
 from numpyro.distributions import kl_divergence
@@ -13,7 +13,7 @@ __all__ = ["NP"]
 
 
 # pylint: disable=too-many-instance-attributes,duplicate-code,not-callable
-class NP(nn.Module):
+class NP(nnx.Module):
     """A neural process.
 
     Implements the core structure of a neural process [1], i.e.,
@@ -41,14 +41,19 @@ class NP(nn.Module):
     ----------
     [1] Garnelo, Marta, et al. "Neural processes".  CoRR. 2018.
     """
+    def __init__(self,
+        decoder: nnx.Module,
+        latent_encoder: tuple[flax.nnx.Module, flax.nnx.Module] | None = None,
+        deterministic_encoder: flax.nnx.Module | None = None,
+        family: Family = Gaussian(),
+        rngs: nnx.Rngs = nnx.Rngs(0)
+    ):
+        self.decoder = decoder
+        self.latent_encoder = latent_encoder
+        self.deterministic_encoder = deterministic_encoder
+        self.family = family
+        self.rngs = rngs
 
-    decoder: nn.Module
-    latent_encoder: tuple[flax.linen.Module, flax.linen.Module] | None = None
-    deterministic_encoder: flax.linen.Module | None = None
-    family: Family = Gaussian()
-
-    def setup(self):
-        """Construct the networks of the class."""
         if self.latent_encoder is None and self.deterministic_encoder is None:
             raise ValueError(
                 "either latent or deterministic encoder needs to be set"
@@ -64,13 +69,11 @@ class NP(nn.Module):
             self._deterministic_encoder = self.deterministic_encoder
         self._family = self.family
 
-    @nn.compact
     def __call__(
         self,
         x_context: Array,
         y_context: Array,
         x_target: Array,
-        **kwargs,
     ):
         """Transform the inputs through the neural process.
 
@@ -83,31 +86,17 @@ class NP(nn.Module):
             (*batch_dims, spatial_dims..., response_dims)
         x_target: jax.Array
             Input data of dimension (*batch_dims, spatial_dims..., feature_dims)
-        **kwargs: kwargs
-            Keyword arguments can include:
-            - y_target: jax.Array. If an argument called 'y_target'
-            is provided, computes the loss (negative ELBO) together with a
-            predictive posterior distribution
 
         Returns
         -------
-        Union[numpyro.distribution, Tuple[numpyro.distribution, float]]
-            If 'y_target' is provided as keyword argument, returns a tuple
-            of the predictive distribution and the negative ELBO which can be
-            used as loss for optimization.
-            If 'y_target' is not provided, returns the predictive
-            distribution only.
+        tfp.Distribution
+            returns the predictive distribution only
         """
-        assert_rank([x_context, y_context, x_target], 3)
-        if "y_target" in kwargs:
-            assert_rank(kwargs["y_target"], 3)
-            return self._negative_elbo(x_context, y_context, x_target, **kwargs)
-
         _, num_observations, _ = x_target.shape
 
         if self.latent_encoder is not None:
-            rng = self.make_rng("sample")
-            z_latent = self._encode_latent(x_context, y_context).sample(rng)
+            rng_key = self.rngs["sample"]()
+            z_latent = self._encode_latent(x_context, y_context).sample(rng_key)
         else:
             z_latent = None
 
@@ -121,20 +110,36 @@ class NP(nn.Module):
 
         return pred_fn
 
-    def _negative_elbo(  # pylint: disable=too-many-locals
+    def loss(
         self,
         x_context: Array,
         y_context: Array,
         x_target: Array,
-        y_target: Array,
+        y_target: Array
     ):
-        _, num_observations, _ = x_target.shape
+        """Transform the inputs through the neural process.
 
+        Parameters
+        ----------
+        x_context: jax.Array
+            Input data of dimension (*batch_dims, spatial_dims..., feature_dims)
+        y_context: jax.Array
+            Input data of dimension
+            (*batch_dims, spatial_dims..., response_dims)
+        x_target: jax.Array
+            Input data of dimension (*batch_dims, spatial_dims..., feature_dims)
+
+        Returns
+        -------
+        float:
+
+        """
+        _, num_observations, _ = x_target.shape
         if self.latent_encoder is not None:
-            rng = self.make_rng("sample")
+            rng_key = self.rngs["sample"]()
             prior = self._encode_latent(x_context, y_context)
             posterior = self._encode_latent(x_target, y_target)
-            z_latent = posterior.sample(rng)
+            z_latent = posterior.sample(rng_key)
             kl = jnp.sum(kl_divergence(posterior, prior), axis=-1)
         else:
             z_latent = None

@@ -1,13 +1,14 @@
+import dataclasses
 from collections.abc import Callable, Iterable
 
 import jax
-from flax import linen as nn
+from flax import nnx
 from flax.linen import initializers
 from flax.linen.linear import default_kernel_init
 from jax import Array
 
 
-class MLP(nn.Module):
+class MLP(nnx.Module):
     """A multi-layer perceptron.
 
     Attributes
@@ -28,34 +29,40 @@ class MLP(nn.Module):
         if true, activate last layer
     """
 
-    output_sizes: Iterable[int]
-    dropout: float | None = None
-    kernel_init: initializers.Initializer = default_kernel_init
-    bias_init: initializers.Initializer = initializers.zeros_init()
-    use_bias: bool = True
-    activation: Callable = jax.nn.relu
-    activate_final: bool = False
+    def __init__(
+            self,
+            output_sizes: Iterable[int],
+            *,
+            dropout: float | None = None,
+            kernel_init: initializers.Initializer = default_kernel_init,
+            bias_init: initializers.Initializer = initializers.zeros_init(),
+            use_bias: bool = True,
+            activation: Callable = jax.nn.relu,
+            activate_final: bool = False,
+            rngs: nnx.Rngs,
+    ):
+        self.activation = activation
+        self.activate_final = activate_final
+        self.dropout = dropout
 
-    def setup(self):
-        """Construct all networks."""
-        output_sizes = tuple(self.output_sizes)
         layers = []
-        for index, output_size in enumerate(output_sizes):
+        for din, dout in zip(output_sizes[:1], output_sizes[1:]):
             layers.append(
-                nn.Dense(
-                    features=output_size,
-                    kernel_init=self.kernel_init,
-                    bias_init=self.bias_init,
-                    use_bias=self.use_bias,
-                    name=f"linear_{index}",
+                nnx.Linear(
+                    in_features=din,
+                    out_features=dout,
+                    kernel_init=kernel_init,
+                    bias_init=bias_init,
+                    use_bias=use_bias,
+                    rngs=rngs
                 )
             )
         self.layers = tuple(layers)
-        if self.dropout is not None:
-            self.dropout_layer = nn.Dropout(self.dropout)
+        if dropout is not None:
+            self.dropout_layer = nnx.Dropout(dropout, rngs=rngs)
 
     # pylint: disable=too-many-function-args
-    def __call__(self, inputs: Array, is_training: bool = False):
+    def __call__(self, inputs: Array):
         """Transform the inputs through the MLP.
 
         Parameters
@@ -76,6 +83,6 @@ class MLP(nn.Module):
             out = layer(out)
             if i < (num_layers - 1) or self.activate_final:
                 if self.dropout is not None:
-                    out = self.dropout_layer(out, deterministic=not is_training)
+                    out = self.dropout_layer(out)
                 out = self.activation(out)
         return out
