@@ -13,12 +13,13 @@ References
 import argparse
 
 import matplotlib.pyplot as plt
+from flax import nnx
 from jax import numpy as jnp
 from jax import random as jr
-from flax import nnx
+
 from ramsey import NP, train_neural_process
 from ramsey.data import sample_from_gaussian_process
-from ramsey.nn import MLP, MultiHeadAttention
+from ramsey.nn import MLP
 
 
 def data(key):
@@ -31,8 +32,8 @@ def data(key):
 def get_neural_process(rngs):
     dim = 128
     np = NP(
-        decoder=MLP([1, dim, dim, dim, 2], rngs=rngs),
-        deterministic_encoder=MLP([1, dim, dim, dim], rngs=rngs)
+        decoder=MLP([dim + 1, dim, dim, dim, 2], rngs=rngs),
+        deterministic_encoder=MLP([2, dim, dim, dim], rngs=rngs),
     )
     return np
 
@@ -48,19 +49,19 @@ def train_np(key, n_context, n_target, x_target, y_target, num_iter):
         n_target=n_target,
         n_iter=num_iter,
         batch_size=2,
+        verbose=True,
     )
     return neural_process
 
 
 def plot(
-        seed,
-        neural_process,
-        params,
-        x_target,
-        y_target,
-        f_target,
-        n_context,
-        n_target,
+    seed,
+    neural_process,
+    x_target,
+    y_target,
+    f_target,
+    n_context,
+    n_target,
 ):
     sample_key, seed = jr.split(seed)
     sample_idxs = jr.choice(
@@ -89,9 +90,7 @@ def plot(
 
         for _ in range(20):
             sample_rng_key, seed = jr.split(seed, 2)
-            y_star = neural_process.apply(
-                variables=params,
-                rngs={"sample": sample_rng_key},
+            y_star = neural_process(
                 x_context=x[jnp.newaxis, sample_idxs, jnp.newaxis],
                 y_context=y[jnp.newaxis, sample_idxs, jnp.newaxis],
                 x_target=x_target[[idx], :, :],
@@ -111,14 +110,13 @@ def run(args):
     data_rng_key, train_rng_key, plot_rng_key = jr.split(jr.PRNGKey(0), 3)
     (x_target, y_target), f_target = data(data_rng_key)
 
-    neural_process, params = train_np(
+    neural_process = train_np(
         train_rng_key, n_context, n_target, x_target, y_target, args.num_iter
     )
 
     plot(
         plot_rng_key,
         neural_process,
-        params,
         x_target,
         y_target,
         f_target,

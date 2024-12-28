@@ -1,7 +1,7 @@
 import flax
 import jax
 import numpyro.distributions as dist
-from chex import assert_axis_dimension, assert_rank
+from chex import assert_axis_dimension
 from flax import nnx
 from jax import Array
 from jax import numpy as jnp
@@ -41,12 +41,14 @@ class NP(nnx.Module):
     ----------
     [1] Garnelo, Marta, et al. "Neural processes".  CoRR. 2018.
     """
-    def __init__(self,
+
+    def __init__(
+        self,
         decoder: nnx.Module,
         latent_encoder: tuple[flax.nnx.Module, flax.nnx.Module] | None = None,
         deterministic_encoder: flax.nnx.Module | None = None,
         family: Family = Gaussian(),
-        rngs: nnx.Rngs = nnx.Rngs(0)
+        rngs: nnx.Rngs = nnx.Rngs(0),
     ):
         self.decoder = decoder
         self.latent_encoder = latent_encoder
@@ -115,7 +117,7 @@ class NP(nnx.Module):
         x_context: Array,
         y_context: Array,
         x_target: Array,
-        y_target: Array
+        y_target: Array,
     ):
         """Transform the inputs through the neural process.
 
@@ -155,7 +157,7 @@ class NP(nnx.Module):
         loglik = jnp.sum(pred_fn.log_prob(y_target), axis=1)
         elbo = jnp.mean(loglik - kl)
 
-        return pred_fn, -elbo
+        return -elbo
 
     @staticmethod
     # pylint: disable=duplicate-code
